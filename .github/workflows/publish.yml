@@ -1,0 +1,62 @@
+# Build and publish shimmer-relevance-studio Docker images to docker.io/upbound
+name: Publish
+
+on:
+  push:
+    branches:
+      - main
+
+env:
+  DOCKER_USR: ${{ secrets.DOCKER_USR }}
+
+jobs:
+  publish:
+    runs-on: ubuntu-22.04
+    if: env.DOCKER_USR != ''
+
+    strategy:
+      matrix:
+        include:
+          - name: shimmer-relevance-studio
+            dockerfile: Dockerfile-server
+          - name: shimmer-relevance-studio-worker
+            dockerfile: Dockerfile-worker
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+        with:
+          platforms: linux/amd64,linux/arm64
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USR }}
+          password: ${{ secrets.DOCKER_PSW }}
+
+      - name: Generate image metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: docker.io/upbound/${{ matrix.name }}
+          tags: |
+            type=raw,value=main
+            type=sha,prefix=,format=short
+
+      - name: Build and push
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ${{ matrix.dockerfile }}
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha,scope=${{ matrix.name }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.name }}
