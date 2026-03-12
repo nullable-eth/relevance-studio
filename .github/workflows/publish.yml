@@ -6,13 +6,10 @@ on:
     branches:
       - main
 
-env:
-  DOCKER_USR: ${{ secrets.DOCKER_USR }}
-
 jobs:
   publish:
     runs-on: ubuntu-22.04
-    if: env.DOCKER_USR != ''
+    if: ${{ secrets.DOCKER_USR != '' }}
 
     strategy:
       matrix:
