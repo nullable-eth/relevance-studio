@@ -14,6 +14,25 @@ from ..models import JudgementCreate
 INDEX_NAME = "esrs-judgements"
 SEARCH_FIELDS = utils.get_search_fields_from_mapping("judgements")
 
+def _extract_inner_hit(hit: Dict[str, Any]) -> Dict[str, Any]:
+    """When a query uses collapse + inner_hits, promote the collapse inner hit
+    so the caller gets a normal ES hit with _source, _id, _index.
+
+    A collapsed query may have multiple inner_hits entries: the collapse
+    inner_hit (e.g. "latest_version") which carries _source, and nested
+    query inner_hits (e.g. "matched_crds") which have _source: false.
+    We select the first inner hit whose first nested doc has _source data."""
+    inner_hits = hit.get("inner_hits")
+    if not inner_hits:
+        return hit
+    for _name, ih in inner_hits.items():
+        nested = ih.get("hits", {}).get("hits", [])
+        if nested and nested[0].get("_source"):
+            inner = nested[0]
+            inner["_score"] = hit.get("_score")
+            return inner
+    return hit
+
 def search(
         workspace_id: str,
         scenario_id: str,
@@ -141,14 +160,20 @@ def search(
         }]
     es_response = es("content").search(index=index_pattern, body=body)
     
-    # Merge docs and ratings
+    # Merge docs and ratings.
+    # When the query uses "collapse" with "inner_hits", the outer hit's _source
+    # is suppressed or belongs to an arbitrary version. The real data lives in
+    # the first inner_hit (e.g. "latest_version"). We detect this and promote
+    # the inner hit so the rest of the pipeline (UI DocCard, judgements join)
+    # sees a normal hit shape with _source, _id, _index.
     response["hits"] = es_response.body["hits"]
     for i, hit in enumerate(response["hits"]["hits"]):
+        doc = _extract_inner_hit(hit)
         response["hits"]["hits"][i] = {
-            "_id": judgements.get(hit["_index"], {}).get(hit["_id"], {}).get("_id"),
-            "@meta": judgements.get(hit["_index"], {}).get(hit["_id"], {}).get("@meta"),
-            "rating": judgements.get(hit["_index"], {}).get(hit["_id"], {}).get("rating"),
-            "doc": hit
+            "_id": judgements.get(doc["_index"], {}).get(doc["_id"], {}).get("_id"),
+            "@meta": judgements.get(doc["_index"], {}).get(doc["_id"], {}).get("@meta"),
+            "rating": judgements.get(doc["_index"], {}).get(doc["_id"], {}).get("rating"),
+            "doc": doc
         }
     if response["hits"]["hits"] and sort in ( "rating-newest", "rating-oldest" ):
         reverse = True if sort == "rating-newest" else False
