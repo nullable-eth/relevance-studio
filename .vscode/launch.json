@@ -1,0 +1,38 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "RS: Flask Server",
+      "type": "debugpy",
+      "request": "launch",
+      "python": "${workspaceFolder}/.venv/bin/python",
+      "module": "flask",
+      "args": ["run", "--port", "4096", "--debug"],
+      "cwd": "${workspaceFolder}",
+      "envFile": "${workspaceFolder}/.env",
+      "env": {
+        "FLASK_APP": "src/server/flask:app",
+        "FLASK_DEBUG": "1",
+        "FLASK_ENV": "development"
+      },
+      "jinja": true,
+      "justMyCode": false
+    },
+    {
+      "name": "RS: Flask Server (no debug)",
+      "type": "debugpy",
+      "request": "launch",
+      "python": "${workspaceFolder}/.venv/bin/python",
+      "module": "flask",
+      "args": ["run", "--port", "4096"],
+      "cwd": "${workspaceFolder}",
+      "envFile": "${workspaceFolder}/.env",
+      "env": {
+        "FLASK_APP": "src/server/flask:app",
+        "FLASK_ENV": "development"
+      },
+      "jinja": true,
+      "justMyCode": false
+    }
+  ]
+}
