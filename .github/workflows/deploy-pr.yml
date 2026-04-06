@@ -1,0 +1,28 @@
+name: deploy-pr
+
+on:
+  workflow_run:
+    workflows: ["Publish"]
+    types: [completed]
+    branches: [main]
+
+jobs:
+  create-deploy-pr:
+    runs-on: ubuntu-24.04
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.UPBOUND_BOT_GITHUB_TOKEN }}
+
+      - name: Trigger upbound/deployment Repository Dispatch Workflow
+        run: |
+          repo_name="$(basename -s .git $(git config --get remote.origin.url))"
+          new_version="${{ github.event.workflow_run.head_sha }}"
+          short_sha="${new_version:0:7}"
+          curl -X POST \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer ${{ secrets.UPBOUND_BOT_GITHUB_TOKEN }}" \
+            --data '{"event_type": "pr_merged", "client_payload": { "repo_name": "'"$repo_name"'", "new_version": "'"$short_sha"'" }}' \
+            "https://api.github.com/repos/upbound/deployment/dispatches"
