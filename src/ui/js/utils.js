@@ -261,12 +261,18 @@ const makePlaceholder = (varName, kind = "null") => {
 }
 
 const sanitizeJsonWithMustache = (src, types = {}) => {
-  // Ignore sections/partials/etc by treating any non-empty sigil as plain placeholder
-  return src.replace(MUSTACHE_RE, (_, sigil, name) => {
-    // If this is a section/partial/inverted/etc (sigil present), default to null
+  // Strip section open/close tags ({{#var}}, {{/var}}) so they don't produce
+  // broken JSON placeholders. The content between them is kept as-is;
+  // inner {{var}} references are replaced by the normal path below.
+  let out = src.replace(/\{\{\s*[#/]\s*[\w.-]+\s*\}\}/g, '')
+  // Replace remaining variable tags with type-safe placeholders
+  out = out.replace(MUSTACHE_RE, (_, sigil, name) => {
     if (sigil && sigil !== "") return makePlaceholder(name, types[name] || "null");
     return makePlaceholder(name, types[name] || "null");
   });
+  // Strip trailing commas left by removed section tags
+  out = out.replace(/,\s*(?=[}\]])/g, '')
+  return out
 }
 
 const restoreMustache = (formatted, original, types = {}) => {
@@ -313,12 +319,24 @@ const restoreMustache = (formatted, original, types = {}) => {
  * Returns { formatted, errors: [] } on success.
  */
 utils.formatJsonWithMustache = (source, types = {}) => {
+  // Section tags ({{#var}}, {{/var}}) wrap conditional JSON fragments that
+  // can't survive a parse→stringify round-trip. Validate the inner JSON is
+  // sound but return the original source unmodified to preserve the tags.
+  if (/\{\{\s*[#/]/.test(source)) {
+    const sanitized = sanitizeJsonWithMustache(source, types)
+    try {
+      JSON.parse(sanitized)
+    } catch (err) {
+      err.message = `JSON-with-Mustache validation failed (section tags detected): ${err.message}`
+      throw err
+    }
+    return source
+  }
   const sanitized = sanitizeJsonWithMustache(source, types)
   let parsed
   try {
     parsed = JSON.parse(sanitized)
   } catch (err) {
-    // Bubble a helpful error that points into the sanitized string
     err.message = `JSON-with-Mustache validation failed: ${err.message}`
     throw err
   }
