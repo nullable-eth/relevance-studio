@@ -143,10 +143,11 @@ const StrategiesEdit = () => {
     try {
       utils.formatJsonWithMustache(strategyDraft)
     } catch (e) {
+      console.error('[RS] Strategy validation failed:', e.message)
       return addToast({
         color: 'danger',
         title: 'Failed to update strategy',
-        text: `Your strategy isn't a valid JSON object.`
+        text: `Your strategy isn't a valid JSON object: ${e.message}`
       })
     }
 
@@ -350,9 +351,20 @@ const StrategiesEdit = () => {
   }
 
   const applyParams = (template, scenarioValues) => {
-    const rendered = template.replace(/{{\s*([\w.-]+)\s*}}/g, (_, key) => {
+    // Process {{#var}}...{{/var}} section blocks: include content only
+    // when the variable is defined in the scenario, otherwise remove it.
+    let rendered = template.replace(
+      /\{\{#\s*([\w.-]+)\s*\}\}([\s\S]*?)\{\{\/\s*\1\s*\}\}/g,
+      (_, key, content) => {
+        const val = scenarioValues[key]
+        return (val !== undefined && val !== null && val !== '') ? content : ''
+      }
+    )
+    rendered = rendered.replace(/{{\s*([\w.-]+)\s*}}/g, (_, key) => {
       return scenarioValues[key]
     })
+    // Strip trailing commas left by removed sections (invalid JSON)
+    rendered = rendered.replace(/,\s*(?=[}\]])/g, '')
     return JSON.parse(rendered)
   }
 
